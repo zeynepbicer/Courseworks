@@ -1,0 +1,127 @@
+\documentclass[fleqn]{article}
+\usepackage[a4paper, margin=20mm]{geometry}
+\usepackage{graphicx,fancyhdr,amssymb,color,enumerate,bm,diffcoeff,empheq,tikz,endnotes,pgfplots}
+\pgfplotsset{compat=1.16}
+\usetikzlibrary{calc,decorations.pathmorphing,patterns}
+\usepackage{tcolorbox}
+\tcbuselibrary{theorems}
+\fancypagestyle{plain}{
+\fancyhf{}
+\fancyhead[L]{University of Greenwich}
+\fancyhead[R]{MATH 1151 Partial Differential Equations}
+\fancyfoot[c]{Page \thepage}
+\renewcommand{\headrulewidth}{0.7pt}
+\renewcommand{\footrulewidth}{0pt}
+}
+\pagestyle{plain}
+\tikzset{every label/.style={font=\footnotesize,inner sep=1pt}}
+\newcommand{\stencilpt}[4][]{\node[circle,fill,draw,inner sep=1.5pt,label={above left:#4},#1] at (#2) (#3) {}}
+\begin{document}
+
+\title{\vspace{-2\baselineskip} 
+MATH 1151 COURSEWORK \#2
+}
+\author{Student ID: 001030798}
+
+
+\maketitle
+\subsection*{Question 1:}
+Considering the linear elliptic boundary value problem:
+\[Lu \equiv 3\diffp[2]{u}{x} + \diffp[2]{u}{y} = 8 \quad \text{where, }\Omega = \{(x,y): 0<x<1,\, 0<y<1\}
+\]
+subject to Dirichlet boundary conditions on $\partial\Omega$. The discretised domain is:
+\[\Omega_h = \left\{ (x_i , y_j) : x_i = x_1+(i-1)h; y_j=y_1+(j-1)h; h = \frac{1}{N-1}\right\}\]
+where $N$ is the number of nodal points along each axis.
+\begin{enumerate}[a)]
+\item Truncation error $\tau_h$ and Consistency:
+\begin{enumerate}[i)]
+    \item Truncation error $\tau_h$ is the error that results from going from a differential operator to a difference operator. Formally,
+    \[\tau_h = (L_h - L)u\]
+    where $L$ is the differential operator and $L_h$ is the difference operator.
+    \item A finite difference scheme is said to be consistent if the truncation error tends to 0 as $h$ tends to 0. i.e.
+    \[\lim_{h\to 0} ||\tau_h|| = 0\]
+\end{enumerate}
+\item \[L_h U_{i,j} \equiv 3 \left ( \frac{U_{i-1,j} - 2U_{i,j} + U_{i+1,j}}{h^2} \right )+ \left ( \frac{U_{i,j-1} - 2U_{i,j} + U_{i,j+1}}{h^2} \right ) = 8\]
+We can define $L_hu(x_i,y_j)$, the difference operator at a grid point $(x_i, y_j)$ as follows:
+\[L_hu(x_i,y_j) = 3\frac{u(x_{i-1},y_j)-2u(x_i,y_j)+u(x_{i+1},y_j)}{h^2} + \frac{u(x_{i},y_{j-1})-2u(x_i,y_j)+u(x_{i},y_{j+1})}{h^2} = 8\]
+Using the Taylor series expansions:
+\[u(x_{i+1},y_j) = u(x_i,y_j)+h\diffp{u(x_i,y_j)}{x}+\frac{h^2}{2!}\diffp[2]{u(x_i,y_j)}{x}+\frac{h^3}{3!}\diffp[3]{u(x_i,y_j)}{x}+\cdots \]
+\[u(x_{i-1},y_j) = u(x_i,y_j)-h\diffp{u(x_i,y_j)}{x}+\frac{h^2}{2!}\diffp[2]{u(x_i,y_j)}{x}-\frac{h^3}{3!}\diffp[3]{u(x_i,y_j)}{x}+\cdots \]
+Adding these two together we get:
+\[u(x_{i+1},y_j)+u(x_{i-1},y_j) = 2u(x_i,y_j)+h^2\diffp[2]{u(x_i,y_j)}{x}+\frac{h^4}{4!}\diffp[4]{u(x_i,y_j)}{x}\cdots\]
+Rearranging:
+\[\underbrace{\frac{u(x_{i-1},y_j)-2u(x_i,y_j)+u(x_{i+1},y_j)}{h^2}}_{L_hu(x_i,y_j)}-\underbrace{\diffp[2]{u(x_i,y_j)}{x}}_{Lu(x_i,y_j)} = \frac{h^2}{12}\diffp[4]{u(x_i,y_j)}{x}+\cdots\]
+Same process for y:
+\[\frac{u(x_{i},y_{j-1})-2u(x_i,y_j)+u(x_{i},y_{j+1})}{h^2}-\diffp[2]{u(x_i,y_j)}{y} = \frac{h^2}{12}\diffp[4]{u(x_i,y_j)}{y}+\cdots\]
+Adding 3 times the first eq. to the second one we have (up to the $h^2$ term):
+\[(L_h-L)u(x_i,y_j) \approx 3\left(\frac{h^2}{12}\diffp[4]{u(x_i,y_j)}{x}\right)+\left(\frac{h^2}{12}\diffp[4]{u(x_i,y_j)}{y}\right) = \tau_h\]
+As \(\lim_{h\to0}||\tau_h|| = 0\) the finite difference scheme is consistent with the original PDE.
+\item A finite difference replacement converges to the original PDE when the exact solution to the set of finite difference equations tends to the exact solution of the PDE as h tends to 0. i.e.
+\[\lim_{h\to0}||U-u|| = 0\]
+As per Lax's Equivalence Theorem, if a finite difference replacement is consistent with a linear BVP, stability is necessary and sufficient for convergence. 
+\end{enumerate}
+\subsection*{Question 2:}
+\[\diffp{u}{t} = 4 \diffp[2]{u}{x}, \,\, (x,t)\in \Omega\quad\text{where, }\Omega = \{ (x,t) : 0< x<1, t>0 \}\]
+subject to initial conditions \(u(x,0) = 3 \sin (\pi x)\) and boundary conditions \(u(0,t) = 0\) and \(u(1,t) = 0\).
+Standard finite difference notation for the discretised domain:
+\[\Omega_h = \{ (x_i,t_k) : x_i = x_1 + (i-1)h, h=\frac{1}{M-1}; t_k = k\Delta t \}\]
+where $M$ is the number of grid point along the $x$-axis and $U_i^k$ is the discretised grid value for $u(x_i,t_k)$.
+\begin{enumerate}[a)]
+\item A finite difference replacement to the above parabolic equation is given by:
+\[\frac{U_i^{k+1} - U_i^k}{\Delta t} = 4 \frac{U_{i-1}^k-2U_i^k+U_{i+1}^k}{\Delta x^2}\]
+Rearranging to obtain the explicit scheme we get
+\[U_i^{k+1} = \frac{4\Delta t}{h^2}U_{i-1}^k+\left(1-\frac{8\Delta t}{h^2}\right)U_i^k+\frac{4\Delta t}{h^2}U_{i+1}^k\]
+As $\Delta t>0$ and $h^2>0$ we need \(1-\frac{8\Delta t}{h^2} > 0\)
+\begin{align*}
+    &1-\frac{8\Delta t}{h^2} > 0\\
+    &1 > \frac{8\Delta t}{h^2}\\
+    &\frac{1}{8} > \frac{\Delta t}{h^2}\\
+    &\Delta t < \frac{h^2}{8} 
+\end{align*}
+If $M = 5$, 
+\[h = \frac{1}{M-1} = 0.25\]
+\[\frac{h^2}{8} = 0.0078125\]
+Hence $\Delta t = 0.007 < 0.0078125$ would be a suitable choice for stability.
+\item Choosing $M = 5$ and $\Delta t = 0.007$ the explicit scheme becomes:
+\[U_i^{k+1} = 0.448\ U_{i-1}^k+0.104\ U_i^k+0.448\ U_{i+1}^k\]
+As per the initial condition $u(x,0) = 3\sin(\pi x)$ and $u(0,t) = u(1,t) = 0$
+\begin{align*}
+    &U_1^0 = 0\\
+    &U_2^0 = 3\sin(\frac{\pi}{4}) = 2.1213\\
+    &U_3^0 = 3\sin(\frac{\pi}{2}) = 3\\
+    &U_4^0 = 3\sin(\frac{3\pi}{4}) = 2.1213\\
+    &U_5^0 = 3\sin(\pi) = 0
+\end{align*}
+\[U_2^1 = 0.448\ U_1^0+0.104\ U_2^0+0.448\ U_3^0 = 1.5646\]
+\[U_3^1 = 0.448\ U_2^0+0.104\ U_3^0+0.448\ U_4^0 = 2.2127\]
+\[U_4^1 = 0.448\ U_3^0+0.104\ U_4^0+0.448\ U_5^0 = 1.5646\]
+\[U_2^2 = 0.448\ U_1^1+0.104\ U_2^1+0.448\ U_3^1 = 1.1540\]
+\[U_3^2 = 0.448\ U_2^1+0.104\ U_3^1+0.448\ U_4^1 = 1.6320\]
+\[U_4^2 = 0.448\ U_3^1+0.104\ U_4^1+0.448\ U_5^1 = 1.1540\]
+\item As the equations for node values are solved iteratively, there will be a round off error at each step. For the FTCS scheme to be stable, we need this error to be insignificant. For this particular example, the rounding off error propagation equation at a grid point $(i,k)$ is:
+\[{E_R}_i^{k+1} =\frac{4\Delta t}{h^2}\ {E_R}_{i-1}^k+\left(1-\frac{8\Delta t}{h^2}\right)\ {E_R}_i^k+\frac{4\Delta t}{h^2}\ {E_R}_{i+1}^k\]
+from this we can form a error propagation matrix equation including all nodal errors:
+\begin{gather}
+\begin{pmatrix}
+{E_R}_2^{k+1}\\
+{E_R}_3^{k+1}\\
+\vdots\\
+{E_R}_{M-1}^{k+1}
+\end{pmatrix}
+=
+\begin{pmatrix}
+1-\frac{8\Delta t}{h^2} & \frac{4\Delta t}{h^2} & \ & \ \\
+\frac{4\Delta t}{h^2}& 1-\frac{8\Delta t}{h^2}&\frac{4\Delta t}{h^2}& \ \\
+\ & \cdot & \cdot & \cdot\\
+\ & \ & \frac{4\Delta t}{h^2} &1-\frac{8\Delta t}{h^2}
+\end{pmatrix}
+\begin{pmatrix}
+{E_R}_2^{k}\\
+{E_R}_3^{k}\\
+\vdots\\
+{E_R}_{M-1}^{k}
+\end{pmatrix}
+\end{gather}
+i.e. \(E_R^{(k+1)} = A^kE_R^{(1)}\)
+\end{enumerate}
+\end{document}
