@@ -1,0 +1,374 @@
+---
+output:
+  pdf_document: default
+  html_document:
+    df_print: paged
+---
+Financial Time Series Coursework
+==================================
+#### Student ID: 001030798
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = FALSE, warning = FALSE, comment = "", fig.asp = .6)
+```
+# Part A: Exploratory Data Analysis
+
+For this report we will be using the FTSE 100 stock price data from 01/01/2002 to 20/03/2020.  
+As we have more than 18 years of price data, we can see on the time series plot of the prices that the time series has an overall upwards trend and is quite volatile. We can see the extremes of the volatility around the 2008 financial crisis and the 2020 Coronavirus pandemic. We can't reliably use the stock price data as it is, hence we will try to find a better way to represent the data in order to model it.
+```{r echo = FALSE, include = FALSE, results = "hide", fig.}
+    library(quantmod); library(fGarch); library(tseries)
+    library(stats); library(e1071); library(caret); library(ggplot2)
+    getSymbols("^FTSE", from = "2002-01-01 ", to= "2020-03-20")    
+    Pt <- as.matrix(na.omit(FTSE$FTSE.Close))
+    
+    log_ftse <- log(Pt)
+```  
+
+```{r echo = FALSE}
+    ts.plot(Pt, main = "FTSE 100 Daily Stock Prices (Close) in $", ylab = "FTSE 100 ($)")
+```  
+
+Taking the log of the prices, we still have a trended time series.  
+
+```{r echo = FALSE}
+    ts.plot(log_ftse, main = "log of FTSE 100 Daily Stock Prices (Close) in $", ylab = "log(FTSE 100) ($)")
+```  
+
+```{r echo = FALSE}
+    rets <- diff(log_ftse)
+    mean <- mean(rets)
+    var <- var(rets)
+    skew <- skewness(rets)
+    kurt<- kurtosis(rets)
+    sd <- sd(rets)
+    min <- min(rets)
+    max <- max(rets)
+    med <- median(rets)
+    range <- range(rets)
+```  
+
+## Analysis of Returns  
+
+```{r echo = FALSE}
+    ts.plot(rets, col = 'darkgrey')
+    abline(h = 0, col ='red')
+```  
+
+After calculating the daily returns of the FTSE100, we can see from the plot that the time series is now possibly stationary, we have successfully removed the trend, but we can still see the volatility.  
+Calculating the statistical properties of the time series, we get the following table:  
+
+
+  
+Property            |  Equation                            | Value
+--------------------|--------------------------------------|----------
+Mean:               |   $\mu = \dfrac{1}{T}\sum_{i=1}^{T}x_i$|  `r round(mean,5)` 
+St. Dev.            |   $\sigma^2 = \dfrac{1}{T}\sum_{i=1}^{T}(x_i-\mu)^2$          |  `r round(sd,5)`
+Variance:           |   $\sigma = \sqrt{\sigma^2}$     |  `r round(var,5)`
+Skewness:           |   $\dfrac{\dfrac{1}{T}\sum_{i=1}^{T}(x_i-\mu)^3}{\sigma^3}$         |  `r round(skew,5)`
+Kurtosis:           |   $\dfrac{\dfrac{1}{T}\sum_{i=1}^{T}(x_i-\mu)^3}{\sigma^3}$         |  `r round(kurt,5)`
+Minimum:            |   $min(X_t)$                         |  `r min`
+Maximum             |   $max(X_t)$                         |  `r max`
+Median:             |   $median(X_t)$                      |  `r med`
+
+
+Range: `r range`  
+Quantiles:
+```{r echo = FALSE, results = "markdown"}
+quantile(rets)
+```  
+
+The empirical data has a mean of almost 0. This is expected from daily returns, as overall the %return from a long period will be 0. The standard deviation is 1.2%. Skewness has a negative 0.4 value, which means the returns are symmetrically distributed. The kurtosis is 9, which means an excess kurtosis of 6, i.e. the distribution has heavy tails. This is also expected from financial time series, because the extreme values are observed more often than the ones in a normal distribution.  
+
+## Normality Tests    
+
+```{r echo = FALSE}
+h<-hist(rets, breaks=200,
+   main="Histogram of Empirical log-returns with Normal Curve")
+xfit<-seq(min(rets),max(rets),length=80)
+yfit<-dnorm(xfit,mean=mean(rets),sd=sd(rets))
+yfit <- yfit*diff(h$mids[1:2])*length(rets)
+lines(xfit, yfit, col="blue", lwd=2)
+qqnorm(rets)
+qqline(rets, col = 'blue', lwd = 2)
+```  
+
+From the empirical histogram, overlayed with the normal distribution, it can be seen that the empirical data is symmetrically distributed, has a stronger peak than the normal distribution. Looking at the qq-plot, it is clear that the distribution is normal in mid-range values. When it comes to marginal values however, the sample diverts from the theoretical values, i.e. we have fatter tails as previously shown by the kurtosis measure.
+
+\newpage 
+
+### Jarque-Bera Test  
+The result from the Jarque-Bera test also indicates normality with p-value < 0.01  
+$H_0$: The data is normally distributed  
+$H_1$: The data is not normally distributed  
+```{r echo = FALSE}
+jarque.bera.test(rets)
+```  
+With a p-value of `r jarque.bera.test(rets)$p.value` we can conclude that the data is normally distributed.  
+
+###Dicky-Fuller Test  
+Testing if the time series has a unit root using the Dickey-Fuller Test where,  
+$H_0$: A unit root is present  
+$H_1$: No unit root - stationary
+```{r echo = FALSE}
+adf.test(rets)
+```  
+
+With a p-value of `r adf.test(rets)$p.value` we can conclude that the time series has a unit root, i.e. it is not stationary. We have already taken the first difference, this may mean we need to take more differences in order to remove the unit root.  
+
+\newpage 
+
+### ACF:  
+
+```{r echo = FALSE}
+acf(na.omit(rets),lag.max = 20, main = "ACF normal returns")
+```  
+
+The ACF plot of daily returns show no significant autocorrelation after lag-1. There are some values barely outside the significance level. This shows that the returns can't be predicted past lag-1.  
+
+```{r echo = FALSE, fig.height=4}
+par(mfrow = c(1,2))
+ acf(na.omit(rets^2),lag.max = 20, main = "ACF squared returns")
+acf(na.omit(abs(rets)),lag.max = 20, main = "ACF absolute returns")
+```  
+
+
+On the other hand, the ACF plots of the squared returns shows significant autocorrelation at all lags, which seems to be slowly fading away. This is a result of the volatility clustering in our returns i.e. volatile periods being followed by volatile periods.  
+The autocorrelation of absolute returns are also significant at all lags shown, which can be attributed to the assymetry of volatility, i.e. negative news creating higher volatility than positive news.  
+
+\newpage
+
+# Part B: Estimation, fitting and Value-at-Risk
+(i) $x_t \sim {} N(\mu,\sigma^2)$ i.e. $x_t = \mu + \sigma\epsilon_t$ where $\epsilon_t \sim N(0,1)$  
+(ii) $x_t \sim N(\mu, \sigma_t^2)$, i.e. $x_t = \mu + \sigma_t\epsilon_t$ where $\epsilon_t N(0,1)$ and $\sigma_t\sim$ GARCH(1,1)  
+
+##### Normal model:  
+
+Unconditional Mean: 
+
+$\begin{aligned}
+E[x_t] = E[\sigma \epsilon_t] &= E[\sigma]E[\epsilon_t]\\
+ &=E[\sigma]\cdot 0 \\
+ &= 0
+\end{aligned}$
+
+Unconditional Variance: 
+
+
+$\begin{aligned}
+var[x_t] &= var[\sigma\epsilon_t] = E[\sigma^2\epsilon_t^2] - E[\sigma\epsilon_t]^2\\
+&=E[\sigma^2]E[\epsilon_t^2] - 0\\
+&=\sigma^2
+\end{aligned}$  
+
+##### GARCH(1,1) Model:  
+
+$\sigma^2 = \alpha_0 + \alpha_1x_{t-1}^2 + \beta_1\sigma_{t-1}^2$
+
+To ensure stationarity we need:  
+
+$\dfrac{\alpha_0}{1-\alpha_1-\beta_1} > 0 \quad\text{i.e.}\quad \alpha_1+\beta_1<1$
+
+and
+
+$1-2\alpha_1^2-(\alpha_1+\beta_1)^2 > 0$
+
+Unconditional Mean: 
+
+
+$\begin{aligned}
+E[x_t] = E[\sigma_t \epsilon_t] &= E[\sqrt{\alpha_0 + \alpha_1 x_{t-1}^2 + \beta_1 \sigma_{t-1}^2}\,\,\epsilon_t \\
+ &= E \left[\sqrt{\alpha_0 + \alpha_1 x_{t-1}^2 + \beta_1 \sigma_{t-1}^2}\right]E[\epsilon_t] \\
+ &= E \left[\sqrt{\alpha_0 + \alpha_1 x_{t-1}^2 + \beta_1 \sigma_{t-1}^2}\right]\cdot 0 \\
+ &= 0
+\end{aligned}$
+
+
+Unconditional Variance: 
+
+
+$\begin{aligned}
+var[x_t] &= var[\sigma_t\epsilon_t] = E[\sigma_t^2\epsilon_t^2]-\left[E[\sigma_t\epsilon_t]\right]^2\\
+&=E[(\alpha_0 + \alpha_1x_{t-1}^2 + \beta_1\sigma_{t-1}^2)\epsilon_t^2] - 0\\
+&=E[(\alpha_0 + \alpha_1x_{t-1}^2 + \beta_1\sigma_{t-1}^2)]E[\epsilon_t^2]\\
+&=E[(\alpha_0 + \alpha_1x_{t-1}^2 + \beta_1\sigma_{t-1}^2)]\\
+&=\alpha_0 + \alpha_1var(x_{t-1}) + \beta_1var(x_{t-1})\\
+&=\alpha_0 +(\alpha_1+\beta_1)var(x_{t-1})
+\end{aligned}$
+
+
+Using repeated substitution and taking the limit as $t\rightarrow\infty$, and provided $|\alpha_1+\beta_1|<1$ we get:   
+$$var(x_t) = \dfrac{\alpha_0}{1-\alpha_1-\beta_1}$$  
+Here we also need $\alpha_1+\beta_1<1$ for the variance to be finite and positive(to ensure stationarity).  
+Looking at the kurtosis of the model:  
+$$\dfrac{E[x_t^4]}{E[x_t^2]^2} = \dfrac{3(1-(\alpha_1+\beta_1)^2)}{1-2\alpha_1^2+(\alpha_1+\beta_1)^2}$$   
+as $\alpha_1+\beta_1 < 1$ this value will be greater than 3. Provided the value is finite and positive i.e. $1-2\alpha_1^2+(\alpha_1+\beta_1)^2 >0$  
+Since $K > 3$, it is clear that the GARCH(1,1) model has a distribution with heavy tails, which makes this process suitable for modeling financial time series, because real wold finance data distributions also have heavy tails.  
+
+##### Fitting the GARCH(1,1) Model in R
+
+```{r include = FALSE}
+rets_subset <- diff(log(as.matrix(na.omit(FTSE$FTSE.Adjusted['2002-01-01::2020-03-05']))))
+```  
+
+```{r}
+garch <- garchFit(formula = ~garch(1, 1), data = rets_subset, trace = FALSE)
+summary(garch)
+mu_garch <- garch@fit$coef[1]
+omega_garch <- garch@fit$coef[2]
+alpha1 <- garch@fit$coef[3]
+beta1 <- garch@fit$coef[4]
+```  
+
+Checking if $\alpha_1 + \beta_1 < 1$:  
+$$
+\alpha_1 + \beta_1 = `r alpha1` + `r beta1` = `r alpha1+beta1` < 1
+$$  
+After fitting the GARCH(1,1) we can write the equation in terms of the estimated parameters as:  
+$$
+\sigma^2 = `r omega_garch` +  `r round(alpha1,4)` x_{t-1}^2 + `r round(beta1,4)` \sigma_{t-1}^2 
+$$
+Looking at the p-values for the estimated parameters, all of them are significant to the model, except $\mu$, which is expected because we are working with a de-meaned time series. Overall the model seems to be a good fit with low AIC, BIC values as calculated below.
+
+
+Calculating the AIC:  
+
+$\begin{aligned}
+AIC &= \frac{-2}{T}\ln(\hat L)+\frac{2}{T}(\# \text{ of parameters})\\
+&=\frac{-2}{`r length(rets_subset)`}14964.13+\frac{2}{`r length(rets_subset)`}4\\
+&= `r (-2/length(rets_subset))*14964.13+(2/length(rets_subset))*4 ` 
+\end{aligned}$  
+
+Calculating the BIC:  
+
+$\begin{aligned}
+BIC &= \frac{-2}{T}\ln(\hat L)+\frac{(\# \text{ of parameters})}{T}\ln(T)\\
+&=\frac{-2}{`r length(rets_subset)`}14964.13+\frac{4}{`r length(rets_subset)`}\ln(`r length(rets_subset)`)\\
+&= `r (-2/length(rets_subset))*14964.13+(4/length(rets_subset))*log(length(rets_subset)) ` 
+\end{aligned}$
+
+```{r}
+mean_rets_sub <- mean(rets_subset[1:4449])
+sd_rets_sub <- sd(rets_subset[1:4449])
+var_normal_1 <-qnorm(0.01)*sqrt(10)*sd_rets_sub
+var_normal_5 <- qnorm(0.05)*sqrt(10)*sd_rets_sub
+var_normal_10 <- qnorm(0.1)*sqrt(10)*sd_rets_sub
+u_normal_1 <- 0
+u_normal_5 <- 0
+u_normal_10 <- 0
+for (i in (1:10)){
+    u_normal_1[i] <- qnorm(0.01)*sqrt(i)*sd_rets_sub
+    u_normal_5[i] <- qnorm(0.05)*sqrt(i)*sd_rets_sub
+    u_normal_10[i] <- qnorm(0.1)*sqrt(i)*sd_rets_sub
+}
+```
+
+\newpage
+
+#### Value-at-Risk  
+
+To put it in perspective, we imagine holding $1M of FTSE100 stock on 02/09/2019. 
+Value at risk for 10 day ahead using the normal distribution with $\mu = `r round(mean_rets_sub,4)`$ and $\sigma = `r round(sd_rets_sub,4)`$.  
+
+$\begin{aligned}
+r_t(10) &= (10 \cdot \mu, 10 \cdot \sigma^2)\\
+&= (10 \cdot `r round(mean_rets_sub,5)*100`\%, 10 \cdot `r round(sd_rets_sub,3)*100`\%^2)
+\end{aligned}$  
+
+As the mean is practically 0, we don't need to take it into consideration. By the end of 10 days, with the following probabilities, we will lose the percentages calculated below:   
+
+$\begin{aligned}
+\text{VaR}_{99\%} &= `r round(qnorm(0.01),2)` \cdot \sqrt{10} \cdot `r round(sd_rets_sub,4)*100`\% \\
+&= `r round(var_normal_1,4)*100`\% = -\$`r format(abs(var_normal_1)*1000000, scientific = FALSE)` \text{ loss with 1\% probability}\\
+\text{VaR}_{95\%} &= `r round(qnorm(0.05),2)` \cdot \sqrt{10} \cdot `r round(sd_rets_sub,4)*100`\% \\
+&= `r round(var_normal_5,4)*100`\%= -\$`r format(abs(var_normal_5)*1000000, scientific = FALSE)` \text{ loss with 5\% probability}\\
+\text{VaR}_{90\%} &= `r round(qnorm(0.1),2)` \cdot \sqrt{10} \cdot `r round(sd_rets_sub,4)*100`\% \\
+&= `r round(var_normal_10,4)*100`\%= -\$`r format(abs(var_normal_10)*1000000, scientific = FALSE)` \text{ loss with 1\% probability}
+\end{aligned}$
+
+Value-at-Risk 10 day ahead using GARCH(1,1) model for the conditional variance:  
+```{r include = FALSE}
+u_sigma <- 0
+u_sigma <- garch@h.t[4449:4458]
+sigma_sq <- sum(garch@h.t[4449:4458])
+sigma <- sqrt(sigma_sq)
+var_garch_1 <- qnorm(0.01)*sigma
+var_garch_5 <- qnorm(0.05)*sigma
+var_garch_10 <- qnorm(0.1)*sigma
+u_garch_1 <- 0
+u_garch_5 <- 0
+u_garch_10 <- 0
+total_sigma <- u_sigma[1]
+for (i in (1:10)){
+    u_garch_1[i] <- qnorm(0.01)*sqrt(total_sigma)
+    u_garch_5[i] <- qnorm(0.05)*sqrt(total_sigma)
+    u_garch_10[i] <- qnorm(0.1)*sqrt(total_sigma)
+    total_sigma <- total_sigma + u_sigma[i+1]
+}
+
+```  
+$\begin{aligned}
+r_t(10) &= (10 \cdot \mu, \sum_{l=1}^{10}\sigma_h(l)^2)\\
+&= (10 \cdot `r round(mean_rets_sub,5)*100`\%, `r round(sigma, 4)*100`\%)
+\end{aligned}$  
+
+Again, we disregard the mean and take the sum of the 10 period ahead $\sigma^2_t$ values predicted by the GARCH model.  
+
+$\begin{aligned}
+\text{VaR}_{99\%} &= `r round(qnorm(0.01),2)` \cdot `r round(sigma,4)*100`\% \\
+&= `r round(var_garch_1,4)*100`\% = -\$`r format(abs(var_garch_1)*1000000, scientific = FALSE)` \text{ loss with 1\% probability}\\
+\text{VaR}_{95\%} &= `r round(qnorm(0.05),2)` \cdot `r round(sigma,4)*100`\% \\
+&= `r round(var_garch_5,4)*100`\% = -\$`r format(abs(var_garch_5)*1000000, scientific = FALSE)` \text{ loss with 5\% probability}\\
+\text{VaR}_{90\%} &= `r round(qnorm(0.1),2)`\cdot `r round(sigma,4)*100`\% \\
+&= `r round(var_garch_10,4)*100`\% = -\$`r format(abs(var_garch_10)*1000000, scientific = FALSE)` \text{ loss with 10\% probability}
+\end{aligned}$  
+
+```{r fig.asp = .9}
+ts.plot(rets[4449:4458], ylim = c(-0.1,0.1), main= "Returns from 02/09/2019 to 12/09/2019", ylab = "Returns")
+text<- "Forecasting Value-at-Risk using the Normal Distribution"
+lines(u_normal_1, type = "l", col = 'red')
+lines(u_normal_5, type = "l", col = 'green')
+lines(u_normal_10, type = "l", col = 'blue')
+lines(u_garch_1, type = "l", col = 'red', lty = 2)
+lines(u_garch_5, type = "l", col = 'green', lty = 2)
+lines(u_garch_10, type = "l", col = 'blue', lty = 2)
+legend('topright',inset = .01, legend=c("Returns", "Normal","99% VaR","95% VaR","90% VaR", "GARCH","99% VaR","95% VaR","90% VaR"),
+       col=c("black","white", "red","green", "blue","white","red","green", "blue"), lty = c(1,0,1,1,1,0,2,2,2), cex = 0.8, bg = 'white')
+mtext(text = text, side =1, line = 4)
+```  
+
+
+As seen on the graphs for both normal and GARCH models, there are no exceedences at any confidence level. Therefore, when choosing the VaR forecast model, it is reasonable to choose the GARCH(1,1) model, as it allows a more flexible VaR estimation.
+
+
+```{r}
+ts.plot(rets_subset, main = "FTSE100 Daily Returns", ylab = "Daily log-return")
+abline(h = qnorm(0.05)*sd(rets_subset), col = "red", lwd =2)
+lines(qnorm(0.05)*garch@sigma.t, col = "blue")
+legend('topright', inset = .005, legend = c("Returns", "1-day ahead 95% VaR (Normal)","1-day ahead 95% VaR (GARCH)"), col = c("black", "red", "blue"),lty = 1, cex = 0.8)
+z_values <- c(qnorm(0.01),qnorm(0.05),qnorm(0.1))
+exc_garch <- 0
+exc_norm <- 0
+for (i in (1:3)){
+    length(rets_subset[rets_subset< z_values[i]*garch@sigma.t])
+    exc_garch[i] <-  length(rets_subset[rets_subset< z_values[i]*garch@sigma.t])
+    exc_norm[i] <- length(rets_subset[rets_subset< z_values[i]*sd(rets_subset)])
+}
+``` 
+
+The plot shows the 1-day ahead VaR predictions at 5% probability for the normal distribution and GARCH(1,1) distribution. It is clear that the GARCH line follows the returns closely and captures the volatility clustering of the time series.  
+The exceedances using 1-day ahead VaR predictions at 99, 95 and 90% probabilities are as follows:
+
+Model| Theoretical| Actual| Exceedance
+-----|------------|-------|-----------
+GARCH 99%|`r round(0.01*length(rets_subset))`(1%)|`r exc_garch[1]`(`r round(100*exc_garch[1]/length(rets_subset),2)`%)|`r max(exc_garch[1]-round(0.01*length(rets_subset)),0)`
+Normal 99%|`r round(0.01*length(rets_subset))`(1%)|`r exc_norm[1]`(`r round(100*exc_norm[1]/length(rets_subset),2)`%)|`r max(exc_norm[1]-round(0.01*length(rets_subset)),0)`
+GARCH 95%|`r round(0.05*length(rets_subset))`(5%)|`r exc_garch[2]`(`r round(100*exc_garch[2]/length(rets_subset),2)`%)|`r max(exc_garch[2]-round(0.05*length(rets_subset)),0)`
+Normal 95%|`r round(0.05*length(rets_subset))`(5%)|`r exc_norm[2]`(`r round(100*exc_norm[2]/length(rets_subset),2)`%)|`r max(exc_norm[2]-round(0.05*length(rets_subset)),0)`
+GARCH 90%|`r round(0.1*length(rets_subset))`(10%)|`r exc_garch[3]`(`r round(100*exc_garch[3]/length(rets_subset),2)`%)|`r max(exc_garch[3]-round(0.1*length(rets_subset)),0)`
+Normal 90%|`r round(0.1*length(rets_subset))`(10%)|`r exc_norm[3]`(`r round(100*exc_norm[3]/length(rets_subset),2)`%)|`r max(exc_norm[3]-round(0.1*length(rets_subset)),0)`
+
+Overall there are 40 days where the observed loss in return was lower than the expected loss for both the normal and GARCH models with 1% probability. There are no exceedences for the normal model when the probability is 5 and 10%. For the GARCH model there's a 23 day exceedance for the 5% probability and none for the 10%.    
+
+This is unexpected, as we would expect the GARCH estimation of VaR to be a better fit to the data at hand and it is more likely to underestimate VaR using normal distribution. However, in this case the normal distribution seems to be a better fit overall.
+
+
